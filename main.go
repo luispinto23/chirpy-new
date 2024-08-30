@@ -29,6 +29,7 @@ func main() {
 	mux.HandleFunc("GET /api/healthz", healthHandler)
 	mux.HandleFunc("GET /admin/metrics", apicfg.metricsHandler)
 	mux.HandleFunc("GET /api/reset", apicfg.resetMetrics)
+	mux.HandleFunc("POST /api/validate_chirp", apicfg.validateChirp)
 
 	log.Fatal(srv.ListenAndServe())
 }
