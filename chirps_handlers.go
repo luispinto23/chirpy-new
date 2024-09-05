@@ -34,6 +34,34 @@ func cleanUpBody(body string) string {
 	return strings.Join(cleanBody, " ")
 }
 
+func respondWithError(w http.ResponseWriter, code int, msg string) {
+	w.WriteHeader(code)
+	respBody := resp{
+		Error: msg,
+	}
+
+	data, err := json.Marshal(respBody)
+	if err != nil {
+		log.Printf("Error marshalling JSON: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(data)
+}
+
+func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("Error marshalling JSON: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(code)
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(data)
+}
+
 func (cfg *apiConfig) validateChirp(w http.ResponseWriter, r *http.Request) {
 	var chirp chirp
 
@@ -41,19 +69,8 @@ func (cfg *apiConfig) validateChirp(w http.ResponseWriter, r *http.Request) {
 	err := decoder.Decode(&chirp)
 	if err != nil {
 		log.Printf("Error decoding body: %s", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		respBody := resp{
-			Error: "Something went wrong",
-		}
 
-		data, err := json.Marshal(respBody)
-		if err != nil {
-			log.Printf("Error marshalling JSON: %s", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(data)
+		respondWithError(w, http.StatusInternalServerError, "something went wrong")
 		return
 	}
 
@@ -63,19 +80,7 @@ func (cfg *apiConfig) validateChirp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(*chirp.Body) > 140 {
-		w.WriteHeader(http.StatusBadRequest)
-		respBody := resp{
-			Error: "Chirp is too long",
-		}
-
-		data, err := json.Marshal(respBody)
-		if err != nil {
-			log.Printf("Error marshalling JSON: %s", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(data)
+		respondWithError(w, http.StatusBadRequest, "Chirp is too long")
 		return
 	}
 
@@ -85,13 +90,5 @@ func (cfg *apiConfig) validateChirp(w http.ResponseWriter, r *http.Request) {
 		CleanedBody: cleanBody,
 	}
 
-	data, err := json.Marshal(respBody)
-	if err != nil {
-		log.Printf("Error marshalling JSON: %s", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(data)
+	respondWithJSON(w, http.StatusOK, respBody)
 }
