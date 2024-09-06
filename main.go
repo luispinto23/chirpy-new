@@ -3,26 +3,32 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 
+	"github.com/joho/godotenv"
 	"github.com/luispinto23/chirpy-new/internal/database"
 )
 
 type apiConfig struct {
 	db             database.DB
 	fileServerHits int
+	jwtSecret      string
 }
 
 func main() {
+	godotenv.Load()
 	mux := http.NewServeMux()
 
 	db, err := database.NewDB("database.json")
 	if err != nil {
 		log.Fatal(err)
 	}
+	jwtSecret := os.Getenv("JWT_SECRET")
 
 	apicfg := apiConfig{
 		fileServerHits: 0,
 		db:             *db,
+		jwtSecret:      jwtSecret,
 	}
 
 	srv := http.Server{
