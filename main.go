@@ -40,6 +40,7 @@ func main() {
 	mux.HandleFunc("GET /api/reset", apicfg.resetMetrics)
 	mux.HandleFunc("POST /api/chirps", apicfg.createChirp)
 	mux.HandleFunc("GET /api/chirps", apicfg.getChirps)
+	mux.HandleFunc("GET /api/chirps/{chirpID}", apicfg.getChirp)
 
 	log.Fatal(srv.ListenAndServe())
 }

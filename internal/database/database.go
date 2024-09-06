@@ -23,6 +23,8 @@ type DBStructure struct {
 	Chirps map[int]Chirp `json:"chirps"`
 }
 
+var ErrNotFound = errors.New("record not found")
+
 // NewDB creates a new database connection
 // and creates the database file if it doesn't exist
 func NewDB(path string) (*DB, error) {
@@ -91,6 +93,26 @@ func (db *DB) GetChirps() ([]Chirp, error) {
 	})
 
 	return chirps, nil
+}
+
+// GetChirp returns the chirp of the given ID from the database
+func (db *DB) GetChirpByID(ID int) (Chirp, error) {
+	db.mux.RLock()
+	defer db.mux.RUnlock()
+
+	var chirp Chirp
+
+	dbStructure, err := db.loadDB()
+	if err != nil {
+		return chirp, err
+	}
+
+	chirp, ok := dbStructure.Chirps[ID]
+	if !ok {
+		return chirp, ErrNotFound
+	}
+
+	return chirp, nil
 }
 
 // ensureDB creates a new database file if it doesn't exist
