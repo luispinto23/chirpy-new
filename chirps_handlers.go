@@ -8,13 +8,12 @@ import (
 	"strings"
 )
 
-type chirp struct {
+type chirpDto struct {
 	Body *string `json:"body,omitempty"`
 }
 
-type resp struct {
-	Error       string `json:"error,omitempty"`
-	CleanedBody string `json:"cleaned_body,omitempty"`
+type errorResp struct {
+	Error string `json:"error,omitempty"`
 }
 
 func cleanUpBody(body string) string {
@@ -36,7 +35,7 @@ func cleanUpBody(body string) string {
 
 func respondWithError(w http.ResponseWriter, code int, msg string) {
 	w.WriteHeader(code)
-	respBody := resp{
+	respBody := errorResp{
 		Error: msg,
 	}
 
@@ -62,8 +61,8 @@ func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 	w.Write(data)
 }
 
-func (cfg *apiConfig) validateChirp(w http.ResponseWriter, r *http.Request) {
-	var chirp chirp
+func (cfg *apiConfig) createChirp(w http.ResponseWriter, r *http.Request) {
+	var chirp chirpDto
 
 	decoder := json.NewDecoder(r.Body)
 	err := decoder.Decode(&chirp)
@@ -86,9 +85,21 @@ func (cfg *apiConfig) validateChirp(w http.ResponseWriter, r *http.Request) {
 
 	cleanBody := cleanUpBody(*chirp.Body)
 
-	respBody := resp{
-		CleanedBody: cleanBody,
+	dbChirp, err := cfg.db.CreateChirp(cleanBody)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, err.Error())
+		return
 	}
 
-	respondWithJSON(w, http.StatusOK, respBody)
+	respondWithJSON(w, http.StatusCreated, dbChirp)
+}
+
+func (cfg *apiConfig) getChirps(w http.ResponseWriter, r *http.Request) {
+	dbChirps, err := cfg.db.GetChirps()
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, dbChirps)
 }

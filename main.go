@@ -3,17 +3,26 @@ package main
 import (
 	"log"
 	"net/http"
+
+	"github.com/luispinto23/chirpy-new/internal/database"
 )
 
 type apiConfig struct {
+	db             database.DB
 	fileServerHits int
 }
 
 func main() {
 	mux := http.NewServeMux()
 
+	db, err := database.NewDB("database.json")
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	apicfg := apiConfig{
 		fileServerHits: 0,
+		db:             *db,
 	}
 
 	srv := http.Server{
@@ -29,7 +38,8 @@ func main() {
 	mux.HandleFunc("GET /api/healthz", healthHandler)
 	mux.HandleFunc("GET /admin/metrics", apicfg.metricsHandler)
 	mux.HandleFunc("GET /api/reset", apicfg.resetMetrics)
-	mux.HandleFunc("POST /api/validate_chirp", apicfg.validateChirp)
+	mux.HandleFunc("POST /api/chirps", apicfg.createChirp)
+	mux.HandleFunc("GET /api/chirps", apicfg.getChirps)
 
 	log.Fatal(srv.ListenAndServe())
 }
