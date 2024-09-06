@@ -35,3 +35,5 @@ func (cfg *apiConfig) createUser(w http.ResponseWriter, r *http.Request) {
 
 	respondWithJSON(w, http.StatusCreated, dbChirp)
 }
+
+func (cfg *apiConfig) login(w http.ResponseWriter, r *http.Request) {}
