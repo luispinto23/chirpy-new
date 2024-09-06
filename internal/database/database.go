@@ -10,17 +10,23 @@ import (
 )
 
 type Chirp struct {
-	ID   int    `json:"id,omitempty"`
 	Body string `json:"body,omitempty"`
+	ID   int    `json:"id,omitempty"`
+}
+
+type User struct {
+	Email string `json:"email,omitempty"`
+	ID    int    `json:"id,omitempty"`
 }
 
 type DB struct {
-	path string
 	mux  *sync.RWMutex
+	path string
 }
 
 type DBStructure struct {
 	Chirps map[int]Chirp `json:"chirps"`
+	Users  map[int]User  `json:"users"`
 }
 
 var ErrNotFound = errors.New("record not found")
@@ -117,12 +123,10 @@ func (db *DB) GetChirpByID(ID int) (Chirp, error) {
 
 // ensureDB creates a new database file if it doesn't exist
 func (db *DB) ensureDB() error {
-	dbStruct := DBStructure{
-		Chirps: make(map[int]Chirp),
-	}
+	dbStruct := new(DBStructure)
 	_, err := os.Stat(db.path)
 	if errors.Is(err, os.ErrNotExist) {
-		return db.writeDB(dbStruct)
+		return db.writeDB(*dbStruct)
 	}
 	return err
 }
@@ -158,4 +162,33 @@ func (db *DB) writeDB(dbStructure DBStructure) error {
 	}
 
 	return os.WriteFile(db.path, file, 0644)
+}
+
+// CreateUser creates a new user and saves it to disk
+func (db *DB) CreateUser(email string) (User, error) {
+	db.mux.Lock()
+	defer db.mux.Unlock()
+
+	dbStructure, err := db.loadDB()
+	if err != nil {
+		return User{}, err
+	}
+
+	if dbStructure.Users == nil {
+		dbStructure.Users = make(map[int]User)
+	}
+
+	id := len(dbStructure.Users) + 1
+	user := User{
+		ID:    id,
+		Email: email,
+	}
+	dbStructure.Users[id] = user
+
+	err = db.writeDB(dbStructure)
+	if err != nil {
+		return User{}, err
+	}
+
+	return user, nil
 }
