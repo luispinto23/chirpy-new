@@ -15,8 +15,9 @@ type Chirp struct {
 }
 
 type User struct {
-	Email string `json:"email,omitempty"`
-	ID    int    `json:"id,omitempty"`
+	Email    string `json:"email,omitempty"`
+	Password string `json:"password,omitempty"`
+	ID       int    `json:"id,omitempty"`
 }
 
 type DB struct {
@@ -165,7 +166,7 @@ func (db *DB) writeDB(dbStructure DBStructure) error {
 }
 
 // CreateUser creates a new user and saves it to disk
-func (db *DB) CreateUser(email string) (User, error) {
+func (db *DB) CreateUser(email string, password string) (User, error) {
 	db.mux.Lock()
 	defer db.mux.Unlock()
 
@@ -178,11 +179,19 @@ func (db *DB) CreateUser(email string) (User, error) {
 		dbStructure.Users = make(map[int]User)
 	}
 
+	for _, user := range dbStructure.Users {
+		if user.Email == email {
+			return User{}, errors.New("somethig went wrong")
+		}
+	}
+
 	id := len(dbStructure.Users) + 1
 	user := User{
-		ID:    id,
-		Email: email,
+		ID:       id,
+		Email:    email,
+		Password: password,
 	}
+
 	dbStructure.Users[id] = user
 
 	err = db.writeDB(dbStructure)
@@ -191,4 +200,26 @@ func (db *DB) CreateUser(email string) (User, error) {
 	}
 
 	return user, nil
+}
+
+// GetUser retrieves the user for a given email
+func (db *DB) GetUser(email string) (User, error) {
+	db.mux.Lock()
+	defer db.mux.Unlock()
+
+	dbStructure, err := db.loadDB()
+	if err != nil {
+		return User{}, err
+	}
+
+	if dbStructure.Users == nil {
+		return User{}, ErrNotFound
+	}
+
+	for _, user := range dbStructure.Users {
+		if user.Email == email {
+			return user, nil
+		}
+	}
+	return User{}, ErrNotFound
 }
