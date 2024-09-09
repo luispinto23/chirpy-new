@@ -11,8 +11,8 @@ import (
 
 type apiConfig struct {
 	db             database.DB
-	fileServerHits int
 	jwtSecret      string
+	fileServerHits int
 }
 
 func main() {
@@ -48,6 +48,7 @@ func main() {
 	mux.HandleFunc("GET /api/chirps", apicfg.getChirps)
 	mux.HandleFunc("GET /api/chirps/{chirpID}", apicfg.getChirp)
 	mux.HandleFunc("POST /api/users", apicfg.createUser)
+	mux.HandleFunc("PUT /api/users", apicfg.updateUser)
 	mux.HandleFunc("POST /api/login", apicfg.login)
 
 	log.Fatal(srv.ListenAndServe())

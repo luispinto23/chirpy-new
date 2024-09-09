@@ -223,3 +223,36 @@ func (db *DB) GetUser(email string) (User, error) {
 	}
 	return User{}, ErrNotFound
 }
+
+// UpdateUser updates a given user
+func (db *DB) UpdateUser(ID int, email, password string) (User, error) {
+	db.mux.Lock()
+	defer db.mux.Unlock()
+
+	dbStructure, err := db.loadDB()
+	if err != nil {
+		return User{}, err
+	}
+
+	if dbStructure.Users == nil {
+		return User{}, ErrNotFound
+	}
+
+	var dbUser *User
+
+	for _, user := range dbStructure.Users {
+		if user.ID == ID {
+			dbUser = &user
+		}
+	}
+
+	dbUser.Email = email
+	dbUser.Password = password
+
+	err = db.writeDB(dbStructure)
+	if err != nil {
+		return User{}, err
+	}
+
+	return *dbUser, nil
+}

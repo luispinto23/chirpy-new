@@ -2,9 +2,14 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+	"strconv"
+	"strings"
+	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -18,6 +23,7 @@ type userDto struct {
 	Email    *string `json:"email,omitempty"`
 	Password *string `json:"password,omitempty"`
 	ID       int     `json:"id,omitempty"`
+	Token    string  `json:"token,omitempty"`
 }
 
 func (cfg *apiConfig) createUser(w http.ResponseWriter, r *http.Request) {
@@ -86,11 +92,108 @@ func (cfg *apiConfig) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	now := time.Now().UTC()
+
+	// Create a NumericDate from the current time
+	numericNow := jwt.NewNumericDate(now)
+
+	experationDate := now.Add(time.Duration(req.ExpiresInSeconds) * time.Second)
+	numericExp := jwt.NewNumericDate(experationDate)
+
+	jwt := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.RegisteredClaims{
+		Issuer:    "chirpy",
+		IssuedAt:  numericNow,
+		ExpiresAt: numericExp,
+		Subject:   strconv.Itoa(dbUser.ID),
+	})
+
+	signedToken, err := jwt.SignedString([]byte(cfg.jwtSecret))
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
 	response := userDto{
 		ID:       dbUser.ID,
 		Email:    &dbUser.Email,
 		Password: nil,
+		Token:    signedToken,
 	}
 
+	respondWithJSON(w, http.StatusOK, response)
+}
+
+func (cfg *apiConfig) updateUser(w http.ResponseWriter, r *http.Request) {
+	authReqHeader := r.Header.Get("Authorization")
+
+	if authReqHeader == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	tokenStr := strings.Split(authReqHeader, " ")[1]
+
+	token, err := jwt.ParseWithClaims(tokenStr, &jwt.RegisteredClaims{
+		Issuer: "chirpy",
+	}, func(token *jwt.Token) (interface{}, error) {
+		return []byte(cfg.jwtSecret), nil
+	})
+	if err != nil {
+		fmt.Println("Token parsing error:", err)
+		respondWithError(w, http.StatusUnauthorized, "Invalid token")
+		return
+	}
+
+	if !token.Valid {
+		respondWithError(w, http.StatusUnauthorized, "Invalid token")
+		return
+	}
+
+	claims, ok := token.Claims.(*jwt.RegisteredClaims)
+	if !ok {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't parse claims")
+		return
+	}
+	userID, err := claims.GetSubject()
+	if err != nil {
+		fmt.Println(err)
+		respondWithError(w, http.StatusInternalServerError, "something went wrong")
+		return
+	}
+
+	var user userDto
+
+	decoder := json.NewDecoder(r.Body)
+	err = decoder.Decode(&user)
+	if err != nil {
+		log.Printf("Error decoding body: %s", err)
+
+		respondWithError(w, http.StatusInternalServerError, "something went wrong")
+		return
+	}
+
+	if user.Email == nil || user.Password == nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	// userID to int
+	userIDInt, err := strconv.Atoi(userID)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "something went wrong")
+		return
+	}
+
+	updatedUser, err := cfg.db.UpdateUser(userIDInt, *user.Email, string(*user.Password))
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	response := userDto{
+		ID:       updatedUser.ID,
+		Email:    &updatedUser.Email,
+		Password: nil,
+	}
 	respondWithJSON(w, http.StatusOK, response)
 }
