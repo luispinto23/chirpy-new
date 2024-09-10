@@ -221,6 +221,7 @@ func (db *DB) GetUser(email string) (User, error) {
 			return user, nil
 		}
 	}
+
 	return User{}, ErrNotFound
 }
 
@@ -238,21 +239,22 @@ func (db *DB) UpdateUser(ID int, email, password string) (User, error) {
 		return User{}, ErrNotFound
 	}
 
-	var dbUser *User
-
-	for _, user := range dbStructure.Users {
-		if user.ID == ID {
-			dbUser = &user
-		}
+	user, exists := dbStructure.Users[ID]
+	if !exists {
+		return User{}, ErrNotFound
 	}
 
-	dbUser.Email = email
-	dbUser.Password = password
+	// Update the user
+	user.Email = email
+	user.Password = password
+
+	// Update the map
+	dbStructure.Users[ID] = user
 
 	err = db.writeDB(dbStructure)
 	if err != nil {
 		return User{}, err
 	}
 
-	return *dbUser, nil
+	return user, nil
 }

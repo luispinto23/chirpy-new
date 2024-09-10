@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -88,7 +87,7 @@ func (cfg *apiConfig) login(w http.ResponseWriter, r *http.Request) {
 
 	err = bcrypt.CompareHashAndPassword([]byte(dbUser.Password), []byte(*req.Password))
 	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, "")
+		respondWithError(w, http.StatusUnauthorized, err.Error())
 		return
 	}
 
@@ -97,8 +96,14 @@ func (cfg *apiConfig) login(w http.ResponseWriter, r *http.Request) {
 	// Create a NumericDate from the current time
 	numericNow := jwt.NewNumericDate(now)
 
-	experationDate := now.Add(time.Duration(req.ExpiresInSeconds) * time.Second)
-	numericExp := jwt.NewNumericDate(experationDate)
+	expiration := 24 * 360
+
+	if req.ExpiresInSeconds != 0 {
+		expiration = req.ExpiresInSeconds
+	}
+
+	expirationDate := now.Add(time.Duration(expiration) * time.Second)
+	numericExp := jwt.NewNumericDate(expirationDate)
 
 	jwt := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.RegisteredClaims{
 		Issuer:    "chirpy",
@@ -139,7 +144,6 @@ func (cfg *apiConfig) updateUser(w http.ResponseWriter, r *http.Request) {
 		return []byte(cfg.jwtSecret), nil
 	})
 	if err != nil {
-		fmt.Println("Token parsing error:", err)
 		respondWithError(w, http.StatusUnauthorized, "Invalid token")
 		return
 	}
@@ -156,7 +160,6 @@ func (cfg *apiConfig) updateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	userID, err := claims.GetSubject()
 	if err != nil {
-		fmt.Println(err)
 		respondWithError(w, http.StatusInternalServerError, "something went wrong")
 		return
 	}
@@ -177,6 +180,12 @@ func (cfg *apiConfig) updateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	pass, err := bcrypt.GenerateFromPassword([]byte(*user.Password), bcrypt.DefaultCost)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
 	// userID to int
 	userIDInt, err := strconv.Atoi(userID)
 	if err != nil {
@@ -184,7 +193,7 @@ func (cfg *apiConfig) updateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updatedUser, err := cfg.db.UpdateUser(userIDInt, *user.Email, string(*user.Password))
+	updatedUser, err := cfg.db.UpdateUser(userIDInt, *user.Email, string(pass))
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, err.Error())
 		return
