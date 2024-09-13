@@ -39,7 +39,10 @@ type DBStructure struct {
 	Tokens map[int]Token `json:"tokens"`
 }
 
-var ErrNotFound = errors.New("record not found")
+var (
+	ErrNotFound     = errors.New("record not found")
+	ErrUnauthorized = errors.New("can't do that")
+)
 
 // NewDB creates a new database connection
 // and creates the database file if it doesn't exist
@@ -112,7 +115,7 @@ func (db *DB) GetChirps() ([]Chirp, error) {
 	return chirps, nil
 }
 
-// GetChirp returns the chirp of the given ID from the database
+// GetChirpByID returns the chirp of the given ID from the database
 func (db *DB) GetChirpByID(ID int) (Chirp, error) {
 	db.mux.RLock()
 	defer db.mux.RUnlock()
@@ -130,6 +133,30 @@ func (db *DB) GetChirpByID(ID int) (Chirp, error) {
 	}
 
 	return chirp, nil
+}
+
+// DeleteChirpByID returns the chirp of the given ID from the database
+func (db *DB) DeleteChirpByID(ID, userID int) error {
+	db.mux.RLock()
+	defer db.mux.RUnlock()
+
+	var chirp Chirp
+
+	dbStructure, err := db.loadDB()
+	if err != nil {
+		return err
+	}
+
+	chirp, ok := dbStructure.Chirps[ID]
+	if !ok {
+		return ErrNotFound
+	}
+
+	if chirp.AuthorID != userID {
+		return ErrUnauthorized
+	}
+
+	return nil
 }
 
 // ensureDB creates a new database file if it doesn't exist

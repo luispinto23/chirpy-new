@@ -131,3 +131,56 @@ func (cfg *apiConfig) getChirp(w http.ResponseWriter, r *http.Request) {
 
 	respondWithJSON(w, http.StatusOK, dbChirp)
 }
+
+func (cfg *apiConfig) deleteChirp(w http.ResponseWriter, r *http.Request) {
+	authReqHeader := r.Header.Get("Authorization")
+
+	if authReqHeader == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	tokenStr := strings.Split(authReqHeader, " ")[1]
+
+	token, err := auth.ValidateJWTToken(tokenStr, cfg.jwtSecret)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Invalid token")
+		return
+	}
+
+	claims, ok := token.Claims.(*jwt.RegisteredClaims)
+	if !ok {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't parse claims")
+		return
+	}
+
+	userID, err := claims.GetSubject()
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "something went wrong")
+		return
+	}
+
+	id, err := strconv.Atoi(r.PathValue("chirpID"))
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	intUserID, err := strconv.Atoi(userID)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	err = cfg.db.DeleteChirpByID(id, intUserID)
+	if err != nil {
+		if errors.Is(err, database.ErrUnauthorized) {
+			respondWithError(w, http.StatusForbidden, err.Error())
+			return
+		}
+		respondWithError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	respondWithJSON(w, http.StatusNoContent, nil)
+}
