@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -13,17 +15,19 @@ import (
 )
 
 type loginReq struct {
-	Email            *string `json:"email,omitempty"`
-	Password         *string `json:"password,omitempty"`
-	ExpiresInSeconds int     `json:"expires_in_seconds,omitempty"`
+	Email    *string `json:"email,omitempty"`
+	Password *string `json:"password,omitempty"`
 }
 
 type userDto struct {
-	Email    *string `json:"email,omitempty"`
-	Password *string `json:"password,omitempty"`
-	ID       int     `json:"id,omitempty"`
-	Token    string  `json:"token,omitempty"`
+	Email        *string `json:"email,omitempty"`
+	Password     *string `json:"password,omitempty"`
+	Token        string  `json:"token,omitempty"`
+	RefreshToken string  `json:"refresh_token,omitempty"`
+	ID           int     `json:"id,omitempty"`
 }
+
+const jwtExpirationSeconds = 360
 
 func (cfg *apiConfig) createUser(w http.ResponseWriter, r *http.Request) {
 	var user userDto
@@ -96,13 +100,7 @@ func (cfg *apiConfig) login(w http.ResponseWriter, r *http.Request) {
 	// Create a NumericDate from the current time
 	numericNow := jwt.NewNumericDate(now)
 
-	expiration := 24 * 360
-
-	if req.ExpiresInSeconds != 0 {
-		expiration = req.ExpiresInSeconds
-	}
-
-	expirationDate := now.Add(time.Duration(expiration) * time.Second)
+	expirationDate := now.Add(time.Duration(jwtExpirationSeconds) * time.Second)
 	numericExp := jwt.NewNumericDate(expirationDate)
 
 	jwt := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.RegisteredClaims{
@@ -112,6 +110,22 @@ func (cfg *apiConfig) login(w http.ResponseWriter, r *http.Request) {
 		Subject:   strconv.Itoa(dbUser.ID),
 	})
 
+	c := 32
+	randB := make([]byte, c)
+	_, err = rand.Read(randB)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "")
+		return
+	}
+
+	refreshToken := hex.EncodeToString(randB)
+
+	updatedUser, err := cfg.db.UpdateUserRefreshToken(dbUser.ID, refreshToken, expirationDate)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
 	signedToken, err := jwt.SignedString([]byte(cfg.jwtSecret))
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, err.Error())
@@ -119,10 +133,11 @@ func (cfg *apiConfig) login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := userDto{
-		ID:       dbUser.ID,
-		Email:    &dbUser.Email,
-		Password: nil,
-		Token:    signedToken,
+		ID:           updatedUser.ID,
+		Email:        &updatedUser.Email,
+		Password:     nil,
+		Token:        signedToken,
+		RefreshToken: updatedUser.RefreshToken,
 	}
 
 	respondWithJSON(w, http.StatusOK, response)

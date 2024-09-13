@@ -7,6 +7,7 @@ import (
 	"os"
 	"sort"
 	"sync"
+	"time"
 )
 
 type Chirp struct {
@@ -15,9 +16,11 @@ type Chirp struct {
 }
 
 type User struct {
-	Email    string `json:"email,omitempty"`
-	Password string `json:"password,omitempty"`
-	ID       int    `json:"id,omitempty"`
+	RefreshToken        string    `json:"refresh_token,omitempty"`
+	Email               string    `json:"email,omitempty"`
+	Password            string    `json:"password,omitempty"`
+	ID                  int       `json:"id,omitempty"`
+	TokenExpirationDate time.Time `json:"token_expiration_date,omitempty"`
 }
 
 type DB struct {
@@ -249,6 +252,37 @@ func (db *DB) UpdateUser(ID int, email, password string) (User, error) {
 	user.Password = password
 
 	// Update the map
+	dbStructure.Users[ID] = user
+
+	err = db.writeDB(dbStructure)
+	if err != nil {
+		return User{}, err
+	}
+
+	return user, nil
+}
+
+// UpdateUser updates a given user refreshToken
+func (db *DB) UpdateUserRefreshToken(ID int, refreshToken string, tokenExpDate time.Time) (User, error) {
+	db.mux.Lock()
+	defer db.mux.Unlock()
+
+	dbStructure, err := db.loadDB()
+	if err != nil {
+		return User{}, err
+	}
+
+	if dbStructure.Users == nil {
+		return User{}, ErrNotFound
+	}
+
+	user, exists := dbStructure.Users[ID]
+	if !exists {
+		return User{}, ErrNotFound
+	}
+
+	user.RefreshToken = refreshToken
+	user.TokenExpirationDate = tokenExpDate
 	dbStructure.Users[ID] = user
 
 	err = db.writeDB(dbStructure)

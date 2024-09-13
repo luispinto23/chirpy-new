@@ -50,6 +50,8 @@ func main() {
 	mux.HandleFunc("POST /api/users", apicfg.createUser)
 	mux.HandleFunc("PUT /api/users", apicfg.updateUser)
 	mux.HandleFunc("POST /api/login", apicfg.login)
+	// mux.HandleFunc("POST /api/refresh", apicfg.refreshToken)
+	// mux.HandleFunc("POST /api/revoke", apicfg.revokeToken)
 
 	log.Fatal(srv.ListenAndServe())
 }
