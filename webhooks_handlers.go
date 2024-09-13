@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/luispinto23/chirpy-new/internal/database"
 )
@@ -17,6 +18,19 @@ type polkaDto struct {
 }
 
 func (cfg *apiConfig) polka(w http.ResponseWriter, r *http.Request) {
+	apiKeyHeader := r.Header.Get("Authorization")
+
+	if apiKeyHeader == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	apiKeyStr := strings.Split(apiKeyHeader, " ")[1]
+	if cfg.polkaApiKey != apiKeyStr {
+		respondWithError(w, http.StatusUnauthorized, "")
+		return
+	}
+
 	var polka polkaDto
 
 	decoder := json.NewDecoder(r.Body)

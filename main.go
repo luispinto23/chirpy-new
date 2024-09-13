@@ -12,6 +12,7 @@ import (
 type apiConfig struct {
 	db             database.DB
 	jwtSecret      string
+	polkaApiKey    string
 	fileServerHits int
 }
 
@@ -24,11 +25,13 @@ func main() {
 		log.Fatal(err)
 	}
 	jwtSecret := os.Getenv("JWT_SECRET")
+	polkaApiKey := os.Getenv("POLKA_API_KEY")
 
 	apicfg := apiConfig{
 		fileServerHits: 0,
 		db:             *db,
 		jwtSecret:      jwtSecret,
+		polkaApiKey:    polkaApiKey,
 	}
 
 	srv := http.Server{
