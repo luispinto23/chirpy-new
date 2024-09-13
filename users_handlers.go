@@ -26,6 +26,7 @@ type userDto struct {
 	Token        string  `json:"token,omitempty"`
 	RefreshToken string  `json:"refresh_token,omitempty"`
 	ID           int     `json:"id,omitempty"`
+	IsChirpyRed  bool    `json:"is_chirpy_red"`
 }
 
 func (cfg *apiConfig) createUser(w http.ResponseWriter, r *http.Request) {
@@ -58,9 +59,10 @@ func (cfg *apiConfig) createUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := userDto{
-		ID:       dbUser.ID,
-		Email:    &dbUser.Email,
-		Password: nil,
+		ID:          dbUser.ID,
+		Email:       &dbUser.Email,
+		Password:    nil,
+		IsChirpyRed: dbUser.IsChirpyRed,
 	}
 	respondWithJSON(w, http.StatusCreated, response)
 }
@@ -116,6 +118,7 @@ func (cfg *apiConfig) login(w http.ResponseWriter, r *http.Request) {
 		ID:           dbUser.ID,
 		Email:        &dbUser.Email,
 		Password:     nil,
+		IsChirpyRed:  dbUser.IsChirpyRed,
 		Token:        signedToken,
 		RefreshToken: refreshTokenDb.RefreshToken,
 	}
@@ -187,9 +190,10 @@ func (cfg *apiConfig) updateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := userDto{
-		ID:       updatedUser.ID,
-		Email:    &updatedUser.Email,
-		Password: nil,
+		ID:          updatedUser.ID,
+		Email:       &updatedUser.Email,
+		IsChirpyRed: updatedUser.IsChirpyRed,
+		Password:    nil,
 	}
 	respondWithJSON(w, http.StatusOK, response)
 }

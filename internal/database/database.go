@@ -23,9 +23,10 @@ type Token struct {
 }
 
 type User struct {
-	Email    string `json:"email,omitempty"`
-	Password string `json:"password,omitempty"`
-	ID       int    `json:"id,omitempty"`
+	Email       string `json:"email,omitempty"`
+	Password    string `json:"password,omitempty"`
+	ID          int    `json:"id,omitempty"`
+	IsChirpyRed bool   `json:"is_chirpy_red"`
 }
 
 type DB struct {
@@ -224,9 +225,10 @@ func (db *DB) CreateUser(email string, password string) (User, error) {
 
 	id := len(dbStructure.Users) + 1
 	user := User{
-		ID:       id,
-		Email:    email,
-		Password: password,
+		ID:          id,
+		Email:       email,
+		Password:    password,
+		IsChirpyRed: false,
 	}
 
 	dbStructure.Users[id] = user
@@ -260,6 +262,37 @@ func (db *DB) GetUser(email string) (User, error) {
 	}
 
 	return User{}, ErrNotFound
+}
+
+// UpgradeUser upgrades to red a user with a given ID
+func (db *DB) UpgradeUser(ID int) error {
+	db.mux.Lock()
+	defer db.mux.Unlock()
+
+	dbStructure, err := db.loadDB()
+	if err != nil {
+		return err
+	}
+
+	if dbStructure.Users == nil {
+		return ErrNotFound
+	}
+
+	user, exists := dbStructure.Users[ID]
+	if !exists {
+		return ErrNotFound
+	}
+
+	user.IsChirpyRed = true
+
+	dbStructure.Users[ID] = user
+
+	err = db.writeDB(dbStructure)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // UpdateUser updates a given user
