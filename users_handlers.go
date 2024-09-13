@@ -268,3 +268,22 @@ func (cfg *apiConfig) refreshToken(w http.ResponseWriter, r *http.Request) {
 
 	respondWithJSON(w, http.StatusOK, response)
 }
+
+func (cfg *apiConfig) revokeToken(w http.ResponseWriter, r *http.Request) {
+	authReqHeader := r.Header.Get("Authorization")
+
+	if authReqHeader == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	tokenStr := strings.Split(authReqHeader, " ")[1]
+
+	err := cfg.db.RevokeToken(tokenStr)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "")
+		return
+	}
+
+	respondWithJSON(w, http.StatusNoContent, nil)
+}

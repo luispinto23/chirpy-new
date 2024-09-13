@@ -355,3 +355,31 @@ func (db *DB) UpdateUserRefreshToken(userID int, refreshToken string, tokenExpDa
 
 	return dbToken, nil
 }
+
+// RevokeToken revokes a given refresh token
+func (db *DB) RevokeToken(refreshToken string) error {
+	db.mux.Lock()
+	defer db.mux.Unlock()
+
+	dbStructure, err := db.loadDB()
+	if err != nil {
+		return err
+	}
+
+	if dbStructure.Tokens == nil {
+		return ErrNotFound
+	}
+
+	for i, token := range dbStructure.Tokens {
+		if token.RefreshToken == refreshToken {
+			delete(dbStructure.Tokens, i)
+			err = db.writeDB(dbStructure)
+			if err != nil {
+				return err
+			}
+			return nil
+		}
+	}
+
+	return ErrNotFound
+}
