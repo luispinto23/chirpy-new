@@ -19,6 +19,10 @@ type loginReq struct {
 	Password *string `json:"password,omitempty"`
 }
 
+type tokenDto struct {
+	Token string `json:"token,omitempty"`
+}
+
 type userDto struct {
 	Email        *string `json:"email,omitempty"`
 	Password     *string `json:"password,omitempty"`
@@ -119,8 +123,9 @@ func (cfg *apiConfig) login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	refreshToken := hex.EncodeToString(randB)
+	refreshExpDate := now.Add(time.Duration(60*24) * time.Hour)
 
-	updatedUser, err := cfg.db.UpdateUserRefreshToken(dbUser.ID, refreshToken, expirationDate)
+	refreshTokenDb, err := cfg.db.UpdateUserRefreshToken(dbUser.ID, refreshToken, refreshExpDate)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -133,11 +138,11 @@ func (cfg *apiConfig) login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := userDto{
-		ID:           updatedUser.ID,
-		Email:        &updatedUser.Email,
+		ID:           dbUser.ID,
+		Email:        &dbUser.Email,
 		Password:     nil,
 		Token:        signedToken,
-		RefreshToken: updatedUser.RefreshToken,
+		RefreshToken: refreshTokenDb.RefreshToken,
 	}
 
 	respondWithJSON(w, http.StatusOK, response)
@@ -219,5 +224,47 @@ func (cfg *apiConfig) updateUser(w http.ResponseWriter, r *http.Request) {
 		Email:    &updatedUser.Email,
 		Password: nil,
 	}
+	respondWithJSON(w, http.StatusOK, response)
+}
+
+func (cfg *apiConfig) refreshToken(w http.ResponseWriter, r *http.Request) {
+	authReqHeader := r.Header.Get("Authorization")
+
+	if authReqHeader == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	tokenStr := strings.Split(authReqHeader, " ")[1]
+
+	dbToken, err := cfg.db.GetToken(tokenStr)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "")
+		return
+	}
+
+	c := 32
+	randB := make([]byte, c)
+	_, err = rand.Read(randB)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "")
+		return
+	}
+
+	now := time.Now().UTC()
+
+	refreshToken := hex.EncodeToString(randB)
+	refreshExpDate := now.Add(time.Duration(60*24) * time.Hour)
+
+	_, err = cfg.db.UpdateUserRefreshToken(dbToken.UserID, refreshToken, refreshExpDate)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	response := tokenDto{
+		Token: refreshToken,
+	}
+
 	respondWithJSON(w, http.StatusOK, response)
 }

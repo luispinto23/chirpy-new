@@ -15,12 +15,16 @@ type Chirp struct {
 	ID   int    `json:"id,omitempty"`
 }
 
-type User struct {
-	RefreshToken        string    `json:"refresh_token,omitempty"`
-	Email               string    `json:"email,omitempty"`
-	Password            string    `json:"password,omitempty"`
-	ID                  int       `json:"id,omitempty"`
+type Token struct {
 	TokenExpirationDate time.Time `json:"token_expiration_date,omitempty"`
+	RefreshToken        string    `json:"refresh_token,omitempty"`
+	UserID              int       `json:"user_id,omitempty"`
+}
+
+type User struct {
+	Email    string `json:"email,omitempty"`
+	Password string `json:"password,omitempty"`
+	ID       int    `json:"id,omitempty"`
 }
 
 type DB struct {
@@ -31,6 +35,7 @@ type DB struct {
 type DBStructure struct {
 	Chirps map[int]Chirp `json:"chirps"`
 	Users  map[int]User  `json:"users"`
+	Tokens map[int]Token `json:"tokens"`
 }
 
 var ErrNotFound = errors.New("record not found")
@@ -262,33 +267,91 @@ func (db *DB) UpdateUser(ID int, email, password string) (User, error) {
 	return user, nil
 }
 
-// UpdateUser updates a given user refreshToken
-func (db *DB) UpdateUserRefreshToken(ID int, refreshToken string, tokenExpDate time.Time) (User, error) {
+// GetToken get's a token based on it's value
+func (db *DB) GetToken(refreshToken string) (Token, error) {
 	db.mux.Lock()
 	defer db.mux.Unlock()
 
 	dbStructure, err := db.loadDB()
 	if err != nil {
-		return User{}, err
+		return Token{}, err
 	}
 
-	if dbStructure.Users == nil {
-		return User{}, ErrNotFound
+	if dbStructure.Tokens == nil {
+		return Token{}, ErrNotFound
 	}
 
-	user, exists := dbStructure.Users[ID]
-	if !exists {
-		return User{}, ErrNotFound
+	for _, token := range dbStructure.Tokens {
+		if token.RefreshToken == refreshToken {
+			return token, nil
+		}
 	}
 
-	user.RefreshToken = refreshToken
-	user.TokenExpirationDate = tokenExpDate
-	dbStructure.Users[ID] = user
+	return Token{}, ErrNotFound
+}
+
+// UpdateUserRefreshToken updates a given user refreshToken
+func (db *DB) UpdateUserRefreshToken(userID int, refreshToken string, tokenExpDate time.Time) (Token, error) {
+	db.mux.Lock()
+	defer db.mux.Unlock()
+
+	dbStructure, err := db.loadDB()
+	if err != nil {
+		return Token{}, err
+	}
+
+	if dbStructure.Tokens == nil {
+		token := Token{
+			UserID:              userID,
+			RefreshToken:        refreshToken,
+			TokenExpirationDate: tokenExpDate,
+		}
+
+		dbStructure.Tokens = make(map[int]Token)
+		dbStructure.Tokens[userID] = token
+
+		err = db.writeDB(dbStructure)
+		if err != nil {
+			return Token{}, err
+		}
+
+		return token, nil
+	}
+
+	dbToken := Token{}
+
+	for _, token := range dbStructure.Tokens {
+		if token.UserID == userID {
+			dbToken = token
+		}
+	}
+
+	if dbToken.UserID == 0 {
+		token := Token{
+			UserID:              userID,
+			RefreshToken:        refreshToken,
+			TokenExpirationDate: tokenExpDate,
+		}
+
+		dbStructure.Tokens[userID] = token
+
+		err = db.writeDB(dbStructure)
+		if err != nil {
+			return Token{}, err
+		}
+
+		return token, nil
+	}
+
+	dbToken.RefreshToken = refreshToken
+	dbToken.TokenExpirationDate = tokenExpDate
+
+	dbStructure.Tokens[userID] = dbToken
 
 	err = db.writeDB(dbStructure)
 	if err != nil {
-		return User{}, err
+		return Token{}, err
 	}
 
-	return user, nil
+	return dbToken, nil
 }
