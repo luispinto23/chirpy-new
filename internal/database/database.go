@@ -11,8 +11,9 @@ import (
 )
 
 type Chirp struct {
-	Body string `json:"body,omitempty"`
-	ID   int    `json:"id,omitempty"`
+	Body     string `json:"body,omitempty"`
+	ID       int    `json:"id,omitempty"`
+	AuthorID int    `json:"author_id,omitempty"`
 }
 
 type Token struct {
@@ -56,7 +57,7 @@ func NewDB(path string) (*DB, error) {
 }
 
 // CreateChirp creates a new chirp and saves it to disk
-func (db *DB) CreateChirp(body string) (Chirp, error) {
+func (db *DB) CreateChirp(body string, userID int) (Chirp, error) {
 	db.mux.Lock()
 	defer db.mux.Unlock()
 
@@ -71,8 +72,9 @@ func (db *DB) CreateChirp(body string) (Chirp, error) {
 
 	id := len(dbStructure.Chirps) + 1
 	chirp := Chirp{
-		ID:   id,
-		Body: body,
+		ID:       id,
+		Body:     body,
+		AuthorID: userID,
 	}
 	dbStructure.Chirps[id] = chirp
 

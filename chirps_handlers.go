@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/luispinto23/chirpy-new/internal/auth"
 	"github.com/luispinto23/chirpy-new/internal/database"
 )
 
@@ -34,10 +36,37 @@ func cleanUpBody(body string) string {
 }
 
 func (cfg *apiConfig) createChirp(w http.ResponseWriter, r *http.Request) {
+	authReqHeader := r.Header.Get("Authorization")
+
+	if authReqHeader == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	tokenStr := strings.Split(authReqHeader, " ")[1]
+
+	token, err := auth.ValidateJWTToken(tokenStr, cfg.jwtSecret)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Invalid token")
+		return
+	}
+
+	claims, ok := token.Claims.(*jwt.RegisteredClaims)
+	if !ok {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't parse claims")
+		return
+	}
+
+	userID, err := claims.GetSubject()
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "something went wrong")
+		return
+	}
+
 	var chirp chirpDto
 
 	decoder := json.NewDecoder(r.Body)
-	err := decoder.Decode(&chirp)
+	err = decoder.Decode(&chirp)
 	if err != nil {
 		log.Printf("Error decoding body: %s", err)
 
@@ -56,8 +85,15 @@ func (cfg *apiConfig) createChirp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cleanBody := cleanUpBody(*chirp.Body)
+	intUserID, err := strconv.Atoi(userID)
+	if err != nil {
+		log.Printf("Error parsing user id: %s", err)
 
-	dbChirp, err := cfg.db.CreateChirp(cleanBody)
+		respondWithError(w, http.StatusInternalServerError, "something went wrong")
+		return
+	}
+
+	dbChirp, err := cfg.db.CreateChirp(cleanBody, intUserID)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, err.Error())
 		return
