@@ -1,17 +1,14 @@
 package main
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"golang.org/x/crypto/bcrypt"
+	"github.com/luispinto23/chirpy-new/internal/auth"
 )
 
 type loginReq struct {
@@ -31,8 +28,6 @@ type userDto struct {
 	ID           int     `json:"id,omitempty"`
 }
 
-const jwtExpirationSeconds = 360
-
 func (cfg *apiConfig) createUser(w http.ResponseWriter, r *http.Request) {
 	var user userDto
 
@@ -50,7 +45,7 @@ func (cfg *apiConfig) createUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pass, err := bcrypt.GenerateFromPassword([]byte(*user.Password), bcrypt.DefaultCost)
+	pass, err := auth.GenerateHashedPass(*user.Password)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -93,45 +88,25 @@ func (cfg *apiConfig) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = bcrypt.CompareHashAndPassword([]byte(dbUser.Password), []byte(*req.Password))
+	err = auth.ValidateToken([]byte(dbUser.Password), []byte(*req.Password))
 	if err != nil {
 		respondWithError(w, http.StatusUnauthorized, err.Error())
 		return
 	}
 
-	now := time.Now().UTC()
-
-	// Create a NumericDate from the current time
-	numericNow := jwt.NewNumericDate(now)
-
-	expirationDate := now.Add(time.Duration(jwtExpirationSeconds) * time.Second)
-	numericExp := jwt.NewNumericDate(expirationDate)
-
-	jwt := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.RegisteredClaims{
-		Issuer:    "chirpy",
-		IssuedAt:  numericNow,
-		ExpiresAt: numericExp,
-		Subject:   strconv.Itoa(dbUser.ID),
-	})
-
-	c := 32
-	randB := make([]byte, c)
-	_, err = rand.Read(randB)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "")
-		return
-	}
-
-	refreshToken := hex.EncodeToString(randB)
-	refreshExpDate := now.Add(time.Duration(60*24) * time.Hour)
-
-	refreshTokenDb, err := cfg.db.UpdateUserRefreshToken(dbUser.ID, refreshToken, refreshExpDate)
+	signedToken, err := auth.IssueJWT(dbUser.ID, cfg.jwtSecret)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	signedToken, err := jwt.SignedString([]byte(cfg.jwtSecret))
+	refreshToken, err := auth.GenerateRefreshToken()
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	refreshTokenDb, err := cfg.db.UpdateUserRefreshToken(dbUser.ID, refreshToken.Token, refreshToken.TokenExpDate)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -158,17 +133,8 @@ func (cfg *apiConfig) updateUser(w http.ResponseWriter, r *http.Request) {
 
 	tokenStr := strings.Split(authReqHeader, " ")[1]
 
-	token, err := jwt.ParseWithClaims(tokenStr, &jwt.RegisteredClaims{
-		Issuer: "chirpy",
-	}, func(token *jwt.Token) (interface{}, error) {
-		return []byte(cfg.jwtSecret), nil
-	})
+	token, err := auth.ValidateJWTToken(tokenStr, cfg.jwtSecret)
 	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, "Invalid token")
-		return
-	}
-
-	if !token.Valid {
 		respondWithError(w, http.StatusUnauthorized, "Invalid token")
 		return
 	}
@@ -178,6 +144,7 @@ func (cfg *apiConfig) updateUser(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusInternalServerError, "Couldn't parse claims")
 		return
 	}
+
 	userID, err := claims.GetSubject()
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "something went wrong")
@@ -200,7 +167,7 @@ func (cfg *apiConfig) updateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pass, err := bcrypt.GenerateFromPassword([]byte(*user.Password), bcrypt.DefaultCost)
+	pass, err := auth.GenerateHashedPass(*user.Password)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -225,65 +192,4 @@ func (cfg *apiConfig) updateUser(w http.ResponseWriter, r *http.Request) {
 		Password: nil,
 	}
 	respondWithJSON(w, http.StatusOK, response)
-}
-
-func (cfg *apiConfig) refreshToken(w http.ResponseWriter, r *http.Request) {
-	authReqHeader := r.Header.Get("Authorization")
-
-	if authReqHeader == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	tokenStr := strings.Split(authReqHeader, " ")[1]
-
-	dbToken, err := cfg.db.GetToken(tokenStr)
-	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, "")
-		return
-	}
-
-	c := 32
-	randB := make([]byte, c)
-	_, err = rand.Read(randB)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "")
-		return
-	}
-
-	now := time.Now().UTC()
-
-	refreshToken := hex.EncodeToString(randB)
-	refreshExpDate := now.Add(time.Duration(60*24) * time.Hour)
-
-	_, err = cfg.db.UpdateUserRefreshToken(dbToken.UserID, refreshToken, refreshExpDate)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	response := tokenDto{
-		Token: refreshToken,
-	}
-
-	respondWithJSON(w, http.StatusOK, response)
-}
-
-func (cfg *apiConfig) revokeToken(w http.ResponseWriter, r *http.Request) {
-	authReqHeader := r.Header.Get("Authorization")
-
-	if authReqHeader == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	tokenStr := strings.Split(authReqHeader, " ")[1]
-
-	err := cfg.db.RevokeToken(tokenStr)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "")
-		return
-	}
-
-	respondWithJSON(w, http.StatusNoContent, nil)
 }
