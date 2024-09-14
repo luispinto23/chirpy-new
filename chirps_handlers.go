@@ -103,9 +103,21 @@ func (cfg *apiConfig) createChirp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (cfg *apiConfig) getChirps(w http.ResponseWriter, r *http.Request) {
-	dbChirps, err := cfg.db.GetChirps()
+	authorID := r.URL.Query().Get("author_id")
+	var intAuthorID int
+	sort := r.URL.Query().Get("sort")
+	var err error
+	if authorID != "" {
+		intAuthorID, err = strconv.Atoi(authorID)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, "Invalid author_id")
+			return
+		}
+	}
+
+	dbChirps, err := cfg.db.GetChirps(intAuthorID, sort)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, err.Error())
+		respondWithError(w, http.StatusInternalServerError, "Failed to retrieve chirps")
 		return
 	}
 

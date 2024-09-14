@@ -91,7 +91,7 @@ func (db *DB) CreateChirp(body string, userID int) (Chirp, error) {
 }
 
 // GetChirps returns all chirps in the database
-func (db *DB) GetChirps() ([]Chirp, error) {
+func (db *DB) GetChirps(authorID int, sorting string) ([]Chirp, error) {
 	db.mux.RLock()
 	defer db.mux.RUnlock()
 
@@ -110,8 +110,22 @@ func (db *DB) GetChirps() ([]Chirp, error) {
 
 	// Sort the slice based on the ID field
 	sort.Slice(chirps, func(i, j int) bool {
+		if sorting == "desc" {
+			return chirps[i].ID > chirps[j].ID
+		}
 		return chirps[i].ID < chirps[j].ID
 	})
+
+	if authorID != 0 {
+		// Filter the slice based on the author ID
+		filteredChirps := make([]Chirp, 0, len(chirps))
+		for _, chirp := range chirps {
+			if chirp.AuthorID == authorID {
+				filteredChirps = append(filteredChirps, chirp)
+			}
+		}
+		chirps = filteredChirps
+	}
 
 	return chirps, nil
 }
